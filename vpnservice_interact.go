@@ -4,8 +4,6 @@ import (
 	"log"
 
 	"golang.org/x/sys/unix"
-
-	"v2ray.com/core/transport/internet"
 )
 
 /*VpnSupportReady VpnSupportReady*/
@@ -43,6 +41,7 @@ func (v *V2RayPoint) vpnShutdown() {
 }
 
 func (v *V2RayPoint) setV2RayDialer() {
-	protectedDialer := &vpnProtectedDialer{vp: v}
-	internet.SubstituteDialer(protectedDialer)
+	//protectedDialer := &vpnProtectedDialer{vp: v}
+	//@TODO 不清楚作用，新版已经没有
+	//internet.SubstituteDialer(protectedDialer)
 }

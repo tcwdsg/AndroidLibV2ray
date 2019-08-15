@@ -2,31 +2,32 @@ package libv2ray
 
 import (
 	"os"
+	//"v2ray.com/core/common/net"
+
+	"v2ray.com/core"
 	// The following are necessary as they register handlers in their init functions.
-	_ "v2ray.com/core/app/router/rules"
+	//_ "v2ray.com/core/app/router/rules"
 	"v2ray.com/core/common/log"
-	"v2ray.com/core/shell/point"
-
-	// The following are necessary as they register handlers in their init functions.
-	_ "v2ray.com/core/proxy/blackhole"
-	_ "v2ray.com/core/proxy/dokodemo"
-	_ "v2ray.com/core/proxy/freedom"
-	_ "v2ray.com/core/proxy/http"
-	_ "v2ray.com/core/proxy/shadowsocks"
-	_ "v2ray.com/core/proxy/socks"
-	_ "v2ray.com/core/proxy/vmess/inbound"
-	_ "v2ray.com/core/proxy/vmess/outbound"
-
-	// The following are necessary as they register handlers in their init functions.
-	_ "v2ray.com/core/transport/internet/kcp"
-	_ "v2ray.com/core/transport/internet/tcp"
-	_ "v2ray.com/core/transport/internet/udp"
-	_ "v2ray.com/core/transport/internet/ws"
-
-	// The following are necessary as they register handlers in their init functions.
-	_ "v2ray.com/core/transport/internet/authenticators/noop"
-	_ "v2ray.com/core/transport/internet/authenticators/srtp"
-	_ "v2ray.com/core/transport/internet/authenticators/utp"
+	//// The following are necessary as they register handlers in their init functions.
+	//_ "v2ray.com/core/proxy/blackhole"
+	//_ "v2ray.com/core/proxy/dokodemo"
+	//_ "v2ray.com/core/proxy/freedom"
+	//_ "v2ray.com/core/proxy/http"
+	//_ "v2ray.com/core/proxy/shadowsocks"
+	//_ "v2ray.com/core/proxy/socks"
+	//_ "v2ray.com/core/proxy/vmess/inbound"
+	//_ "v2ray.com/core/proxy/vmess/outbound"
+	//
+	//// The following are necessary as they register handlers in their init functions.
+	//_ "v2ray.com/core/transport/internet/kcp"
+	//_ "v2ray.com/core/transport/internet/tcp"
+	//_ "v2ray.com/core/transport/internet/udp"
+	//_ "v2ray.com/core/transport/internet/ws"
+	//
+	//// The following are necessary as they register handlers in their init functions.
+	//_ "v2ray.com/core/transport/internet/authenticators/noop"
+	//_ "v2ray.com/core/transport/internet/authenticators/srtp"
+	//_ "v2ray.com/core/transport/internet/authenticators/utp"
 )
 
 /*V2RayPoint V2Ray Point Server
@@ -41,7 +42,7 @@ type V2RayPoint struct {
 	ConfigureFile        string
 	ConfigureFileContent string
 	Callbacks            V2RayCallbacks
-	vpoint               *point.Point
+	v2rServer            core.Server
 	IsRunning            bool
 	conf                 *libv2rayconf
 	escortProcess        *[](*os.Process)
@@ -68,47 +69,69 @@ func (v *V2RayPoint) pointloop() {
 	err := v.checkIfRcExist()
 
 	if err != nil {
-		log.Error("Failed to copy asset", err)
+		log.Record(&log.GeneralMessage{
+			Severity: log.Severity_Error,
+			Content:  "Failed to copy asset : " + err.Error(),
+		})
 		v.Callbacks.OnEmitStatus(-1, "Failed to copy asset ("+err.Error()+")")
 
 	}
 
-	log.Info("v.renderAll() ")
+	log.Record(&log.GeneralMessage{
+		Severity: log.Severity_Info,
+		Content:  "v.renderAll() ",
+	})
 	v.renderAll()
 
-	config, err := point.LoadConfig(v.parseCfg())
+	config, err := core.LoadConfig("json", "config.json", v.parseCfg())
 	if err != nil {
-		log.Error("Failed to read config file (", v.ConfigureFile, "): ", v.ConfigureFile, err)
+		log.Record(&log.GeneralMessage{
+			Severity: log.Severity_Error,
+			Content:  "Failed to read config file (" + v.ConfigureFile + "): " + v.ConfigureFile + err.Error(),
+		})
 
 		v.Callbacks.OnEmitStatus(-1, "Failed to read config file ("+v.ConfigureFile+")")
 
 		return
 	}
 
-	vPoint, err := point.NewPoint(config)
+	v2rServer, err := core.New(config)
 	if err != nil {
-		log.Error("Failed to create Point server: ", err)
+		log.Record(&log.GeneralMessage{
+			Severity: log.Severity_Error,
+			Content:  "Failed to create Point server: " + err.Error(),
+		})
 
 		v.Callbacks.OnEmitStatus(-1, "Failed to create Point server ("+err.Error()+")")
 
 		return
 	}
 	v.IsRunning = true
-	log.Info("vPoint.Start() ")
-	vPoint.Start()
-	v.vpoint = vPoint
+	log.Record(&log.GeneralMessage{
+		Severity: log.Severity_Info,
+		Content:  "vPoint.Start()",
+	})
+	v2rServer.Start()
+	v.v2rServer = v2rServer
 
-	log.Info("v.escortingUP() ")
+	log.Record(&log.GeneralMessage{
+		Severity: log.Severity_Info,
+		Content:  "vPoint.escortingUP()",
+	})
 	v.escortingUP()
 
 	v.vpnSetup()
 
 	if v.conf != nil {
 		env := v.conf.additionalEnv
-		log.Info("Exec Upscript() ")
+		log.Record(&log.GeneralMessage{
+			Severity: log.Severity_Info,
+			Content:  "Exec Upscript() "})
 		err = v.runbash(v.conf.upscript, env)
 		if err != nil {
-			log.Error("OnUp failed to exec: ", err)
+			log.Record(&log.GeneralMessage{
+				Severity: log.Severity_Error,
+				Content:  "OnUp failed to exec: " + err.Error()})
 		}
 	}
 
@@ -124,17 +147,23 @@ func (v *V2RayPoint) RunLoop() {
 
 func (v *V2RayPoint) stopLoopW() {
 	v.IsRunning = false
-	v.vpoint.Close()
+	v.v2rServer.Close()
 
 	if v.conf != nil {
 		env := v.conf.additionalEnv
-		log.Info("Running downscript")
+		log.Record(&log.GeneralMessage{
+			Severity: log.Severity_Info,
+			Content:  "Running downscript"})
 		err := v.runbash(v.conf.downscript, env)
 
 		if err != nil {
-			log.Error("OnDown failed to exec: ", err)
+			log.Record(&log.GeneralMessage{
+				Severity: log.Severity_Error,
+				Content:  "OnDown failed to exec: " + err.Error()})
 		}
-		log.Info("v.escortingDown() ")
+		log.Record(&log.GeneralMessage{
+			Severity: log.Severity_Info,
+			Content:  "v.escortingDown() "})
 		v.escortingDown()
 	}
 
@@ -158,6 +187,6 @@ func NewV2RayPoint() *V2RayPoint {
 closing dead connections.
 */
 func (v *V2RayPoint) NetworkInterrupted() {
-	v.vpoint.Close()
-	v.vpoint.Start()
+	v.v2rServer.Close()
+	v.v2rServer.Start()
 }
